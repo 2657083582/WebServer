@@ -255,7 +255,7 @@ $(变量名)
 
 通常，在为调试而编译时，我们会关掉编译器的优化选项（-o)，并打开调试选项（-g)。
 
-另外，’-Wall'在尽量不影响程序行为的情况下选项打开 所有warning，也可以发现许多问题，避免一些不必哟啊的BUG。
+另外，’-Wall'在尽量不影响程序行为的情况下选项打开 所有warning，也可以发现许多问题，避免一些不必哟啊的BUG。,
 
 ```shell
 gcc -g -Wall program.c -o program 
@@ -313,4 +313,162 @@ gcc -g -Wall program.c -o program
 | i/info undisplay 编号 | 取消显示自动变量                   |
 | set var 变量名=变量值 | 设置变量值                         |
 | until                 | 跳出循环                           |
+
+### 七、文件IO
+
+![](D:\WebServer\NoteBook\第一章\标准C库IO函数.png)
+
+#### 标准C库IO和Linux系统IO的关系
+
+![](D:\WebServer\NoteBook\第一章\标准C库IO和Linux系统IO的关系.png)
+
+#### 虚拟地址空间
+
+![](D:\WebServer\NoteBook\第一章\虚拟地址空间.png)
+
+进程是系统为程序分配资源的最小单位
+
+程序是磁盘上的代码，进程（运行中的程序）会加载到内存里。
+
+#### 文件描述符
+
+![](D:\WebServer\NoteBook\第一章\文件描述符.png)
+
+#### Linux系统IO函数
+
+1、open函数
+
+头文件：
+
+```c
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+```
+
+
+
+(1) ```int open(const char *pathname,int flags);```
+
+作用：打开一个已经存在的文件
+
+参数：
+
+​		-pathname:要打开的文件路径
+
+​		-flags:对文件的操作权限设置还有其他的设置
+
+​		O_RDONLY(只读)，O_WRONLY(只写),O_RDWR（可读写） 这三个参数互斥
+
+返回值：返回一个新的文件描述符，如果调用失败，返回-1
+
+errno： Linux系统函数库里面的一个全局变量，记录最近的错误号。
+
+(2)```int open(const char *pathname,int flags,mode_t mode);```
+
+参数：
+
+​		-pathname:要打开的文件路径
+
+​		-flags:对文件的操作权限设置还有其他的设置。
+
+​				  flags参数是一个int类型的数据，占4字节，共32位。flags 32个位，每一位就是一个标志位。
+
+​				-必选项：O_RDONLY(只读)，O_WRONLY(只写),O_RDWR（可读写） 这三个参数互斥
+
+​				-可选项：O_CREATE 文件不存在，创建新文件
+
+​		-mode:八进制的数，表示创建出的新的文件的操作权限，比如0775
+
+​		最终的权限是mode & ~umask,umask的作用是抹去某些权限
+
+2、close函数
+
+3、read函数
+
+```c
+ssize_t read(int fd,void *buf,size_t count);
+```
+
+头文件：#include<unistd.h>
+
+参数：
+
+​			-fd:文件描述符，由open得到，通过这个文件描述符操作某个文件
+
+​			-buf:需要读取数据存放的地方，数组的地址（传出参数）
+
+​			-count:数组的大小
+
+返回值：
+
+​			-成功：
+
+​					>0:返回时间的读取到的字节数
+
+​					=0:文件已经读取完了
+
+​			-失败：-1，并设置errno
+
+4、write函数
+
+```C
+ssize_t write(int fd,cosnt void *buf,size_t count);
+```
+
+头文件:#include<unistd.h>
+
+参数：
+
+​			-fd:文件描述符，由open得到，通过这个文件描述符操作某个文件
+
+​			-buf:要往磁盘中写入的数据
+
+​			-count:要写的数据的实际大小
+
+返回值：
+
+​			-成功：实际写入的字节数
+
+​			-失败：-1，并设置errno
+
+利用open、read、write等函数实现文件复制的简易程序：
+
+```c
+#include<unistd.h>
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+
+int main(){
+    
+    //1.通过open打开文件
+    int srcfd=open("english.txt",O_RDONLY);
+    if(srcfd==-1){
+        perror("open");
+        return -1;
+    }
+
+    //2.创建一个新的文件——拷贝文件
+    int destfd=open("cpy.txt",O_WRONLY | O_CREAT, 0064);
+    if(destfd==-1){
+        perror("open");
+        return -1;
+    }
+
+    //3.频繁的读写操作
+    char buf[1024]={0};
+    int len=0;
+    while((len=read(srcfd,buf,sizeof(buf)))>0){
+        write(destfd,buf,len);
+    }
+
+    //4.关闭文件
+    close(srcfd);
+    close(destfd);
+
+    return 0;
+}
+```
 
