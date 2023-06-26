@@ -472,3 +472,883 @@ int main(){
 }
 ```
 
+5、lseek函数
+
+```c
+off_t lseek(int fd,off_t offset,int whence);
+```
+
+头文件：#include<sys/types.h>
+
+​			   #include<unistd.h>
+
+参数：
+
+​		-fd:文件描述符，通过open得到的，通过这个fd操作某个文件
+
+​		-offset:偏移量
+
+​		-whence:
+
+​				SEEK_SET:直接设置文件指针的偏移量
+
+​				SEEK_CUR:设置偏移量：当前位置+第二个参数offset的值
+
+​				SEEK_END:设置偏移量：文件大小+第二份参数offset的值
+
+返回值：返回文件指针的位置
+
+作用：
+
+​		（1）移动文件指针到头文件```lseek(fd,0,SEEK_SET);```
+
+​		（2）获取当前文件指针的位置```lseek(fd,0,SEEK_CUR);```
+
+​		（3）获取文件长度```lseek(fd,0,SEEK_END);```
+
+​		（4）拓展文件长度，当前文件10b,拓展到110b,增加100个字节```lseek(fd,100,SEEK_END)l```
+
+​			注意：需要写入一次数据
+
+利用lseek拓展文件长度的简易程序：
+
+```c
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<unistd.h>
+#include<stdio.h>
+int main(){
+    //打开文件
+    int fd=open("hello.txt",O_RDWR);
+    if (fd==-1)
+    {
+        perror("open");
+        return -1;
+    }
+
+    //扩展文件的长度
+    int ret=lseek(fd,100,SEEK_END);
+    if(ret==-1){
+        perror("lseek");
+        return -1;
+    }
+
+    //写入空数据
+    write(fd," ",1);
+
+    //关闭文件
+    close(fd);
+    return 0;
+}
+```
+
+6、stat函数与lstat函数
+
+```c
+int stat(const char *pathname,struct stat *statbuf);
+```
+
+作用：获取一个文件相关的信息
+
+```c
+int lstat(const char *pathname,struct stat *statbuf);
+```
+
+作用：lstat函数与 stat 函数类似，用于获取文件或目录的元数据信息。但是，lstat 函数对于符号链接文件会返回链接本身而不是链接所指向的文件的元数据信息。
+
+头文件：\#include<sys/stat.h>
+
+ 			  #include<unistd.h>
+
+参数：
+
+​		-pathname：操作文件的路径
+
+​		-statbuf:结构体变量，传出参数，用于保存获取到的文件的信息
+
+补充：
+
+stat结构体：
+
+```c
+struct stat{
+	dev_t st_dev;						//文件的设备编号
+	ino_t st_ino;						//节点
+	mode_t st_mode;						//文件的类型和存取的权限
+	nlink_t st_nlink;					//连到该文件的硬连接数目
+	uid_t st_uid;						//用户ID
+	gid_t st_gid;						//组ID
+	dev_t st_rdev;						//设备文件的设备编号
+	off_t st_size;						//文件字节数（文件大小）
+	blksize_t st_blkszie;				//块大小
+	blkcnt_t st_blocks;					//块数
+	time_t st_attime;					//最后一次访问时间
+	time_t st_mtime;					//最后一次修改时间
+	time_t st_ctime;					//最后一次改变时间（指属性）
+};
+```
+
+st_mode:
+
+![](D:\WebServer\NoteBook\第一章\st_mode.png)
+
+返回值：
+
+​		成功：返回0
+
+​		失败：返回-1，设置errno
+
+
+
+利用stat等函数简单模拟实现ls -l
+
+```C
+//模拟实现li-l指令
+//-rw-rw-r-- 1 nowcoder nowcoder 6 6月  25 11:03 a.txt
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<unistd.h>
+#include<pwd.h>
+#include<grp.h>
+#include<time.h>
+#include<string.h>
+
+int main(int argc,char * argv[]){
+
+    //判断输入参数是否正确
+    if(argc < 2){
+        printf("%s filename\n",argv[0]);
+        return -1;
+    }
+
+    //通过stat函数获取文件的信息
+    struct stat st;
+    int ret = stat(argv[1],&st);
+    if(ret == -1){
+        perror("stat");
+        return -1;
+    }
+
+    //获取文件类型和文件权限
+    char perms[11]={};
+
+    switch(st.st_mode & S_IFMT){
+        case S_IFLNK:
+            perms[1]='l';
+            break;
+        case S_IFDIR:
+            perms[0]='d';
+            break;
+        case S_IFREG:
+            perms[0]='-';
+            break;
+        case S_IFBLK:
+            perms[0]='b';
+            break;
+        case S_IFCHR:
+            perms[0]='c';
+            break;
+        case S_IFSOCK:
+            perms[0]='s';
+            break;
+        case S_IFIFO:
+            perms[0]='p';
+            break;
+        default:
+            perms[0]='?';
+            break;
+    }
+
+    //判断文件的访问权限
+    //文件所有者
+    perms[1]=(st.st_mode & S_IRUSR)?'r':'-';
+    perms[2]=(st.st_mode & S_IWUSR)?'w':'-';
+    perms[3]=(st.st_mode & S_IXUSR)?'x':'-';
+
+    //文件所在组
+    perms[4]=(st.st_mode & S_IRGRP)?'r':'-';
+    perms[5]=(st.st_mode & S_IWGRP)?'w':'-';
+    perms[6]=(st.st_mode & S_IXGRP)?'w':'-';
+
+    perms[7]=(st.st_mode & S_IROTH)?'r':'-';
+    perms[8]=(st.st_mode & S_IWOTH)?'w':'-';
+    perms[9]=(st.st_mode & S_IXOTH)?'x':'-';
+
+    //硬连接数
+    int linknum=st.st_nlink;
+
+    //文件所有者
+    char * fileUser = getpwuid(st.st_uid)->pw_name;
+
+    //文件所在组
+    char * fileGrp = getgrgid(st.st_gid)->gr_name;
+
+    //文件大小
+    long int fileSzie = st.st_size;
+
+    //获取修改时间
+    char * time = ctime(&st.st_mtime);
+    char mtime[512] = {0};
+    strncpy(mtime, time, strlen(time) - 1);
+
+    char buf[1024];
+    sprintf(buf,"%s %d %s %s %ld %s %s",perms,linknum,fileUser,fileGrp,fileSzie,mtime,argv[1]);
+    printf("%s\n",buf);
+    return 0;
+}
+```
+
+### 八、文件属性操作函数
+
+1、access函数
+
+```c
+int access(const char *pathname,int mode);
+```
+
+作用：判断某个文件是否有某个权限，或者判断文件是否存在
+
+头文件：#include<unistd.h>
+参数：
+
+​		-pahtname:判断的文件路径
+
+​		-mode:
+
+​				R_OK：判断是否有读权限
+
+​				W_OK：判断是否有写权限
+
+​				X_OK：判断是否有执行权限
+
+​				F_OK：判断文件是否存在
+
+返回值：成功返回0，失败返回-1
+
+查看文件权限的简易程序实例：
+
+```c
+#include<unistd.h>
+#include<stdio.h>
+
+int main(){
+    int ret=access("a.txt",F_OK);
+    if(ret==-1){
+        perror("access");
+        printf("文件不存在");
+        return -1;
+    }
+    printf("文件存在！");
+    return 0;
+}
+```
+
+
+
+2、chmod函数
+
+```c
+int chmod(const char *pathname,mode_t mode);
+```
+
+作用：修改文件的权限
+
+头文件：#include<unistd.h>
+
+参数：	
+
+​		-pathname:需要修改的文件的路径
+
+​		-mode:需要修改的权限值，八进制的数
+
+返回值：成功返回0，失败返回-1
+
+修改文件权限的简易程序实例：
+
+```c
+#include<unistd.h>
+#include<sys/stat.h>
+#include<stdio.h>
+
+int main(){
+    int ret=chmod("a.txt",0777);
+    if(ret == -1){
+        perror("chmod");
+        return -1;
+    }
+    return 0;
+}
+```
+
+
+
+3、chown函数
+
+```c
+int chown(const char *pathname,uid_t owner,gid_t group);
+```
+
+作用：修改文件的所有者或者所在组
+
+头文件：#include<unistd.h>
+
+参数：
+
+​		-pathname：要更改的文件名
+
+​		-owner:拥有者uid
+
+​		-group:所属组gid
+
+返回值：成功返回0，失败返回-1
+
+4、truncate函数
+
+```c
+int truncate(const char *path,off_t length);
+```
+
+作用：缩减或者扩展文件的尺寸至指定大小
+
+头文件：#include<unistd.h>
+
+​			   #include<sys/types.h>
+
+参数：
+
+​		-path:需要修改的文件的路径
+
+​		-length:修改后的目标大小
+
+返回值：成功返回0，失败返回-1
+
+扩展/缩减文件大小的简易程序实例：
+
+```c
+#include<unistd.h>
+#include<sys/types.h>
+#include<stdio.h>
+/*
+ *b.txt的大小：13	
+ *利用truncate函数扩展/缩减文件大小
+ */
+ 
+int main(){
+	//将文件大小扩展为20
+    int ret=truncate("b.txt",20);
+    //将文件大小缩减为5
+    //int ret=truncate("b.txt",5);
+    if(ret==-1){
+        perror("truncate");
+        return -1;
+    }
+    return 0;
+}
+```
+
+
+
+### 九、目录操作函数
+
+1、mkdir函数
+
+```c
+int mkdir(const *pathname,mode_t mode);
+```
+
+作用：创建一个目录
+头文件：#include<sys/stat.h>
+
+​			   #include<sys/types.h>
+
+参数：
+
+​		-pathname:创建的目录的路径
+
+​		-mode:权限，八进制的数
+
+返回值：成功返回0，失败返回-1
+
+2、rmdir函数
+
+```c
+int rmdir(const char *pathname);
+```
+
+作用：删除空目录
+
+头文件：#include<sys/stat.h>
+
+​			   #include<sys/types.h>
+
+参数：-pathname:创建的目录的路径
+
+返回值：成功返回0，失败返回-1
+
+3、rename函数
+
+```c
+int rename(const char *oldpath,const char *newpath);
+```
+
+作用：修改文件名称
+
+头文件：#include<sys/stat.h>
+
+​			   #include<sys/types.h>
+
+参数：
+
+​		-oldpath:要修改名称的文件的原路径
+
+​		-newpath:修改后的的新路径（文件名）
+
+返回值：成功返回0，失败返回-1
+
+4、chdir函数
+
+```c
+int chdir(const char *path);
+```
+
+作用：修改进程的工作目录
+
+头文件：#include<unistd.h>
+
+参数：
+
+​		-path:需要修改的工作路径
+
+5、getcwd函数
+
+```c
+char *getcwd(char *buf,size_t size);
+```
+
+作用：获取当前工作目录
+
+头文件：#include<unistd.h>
+
+参数：
+
+​		-buf:存储的路径，指向的是一个数组（传出参数）
+
+​		-size:数组的大小
+
+返回值：返回值指向一块内存，这个数据就是第一个参数
+
+
+
+获取并修改当前工作目录的简易程序：			
+
+```c
+#include<unistd.h>
+#include<stdio.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<fcntl.h>
+
+int main(){
+
+    //获取当前的工作目录
+    char buf[1024];
+    getcwd(buf,sizeof(buf));
+    printf("当前的工作目录是：%s\n",buf);
+
+    //修改工作目录
+    int ret=chdir("/home/nowcoder/Linux/lesson1-14/test/");
+    if(ret==-1){
+        perror("chdir");
+        printf("sb xiongwei\n");
+        return -1;
+    }
+
+    //创建一个新文件
+    int fd=open("b.txt",O_CREAT | O_RDWR,0664);
+    if(fd==-1){
+        perror("open");
+        return -1;
+    }
+
+    close(fd);
+
+    //获取当前的工作目录
+    char buf1[1024];
+    getcwd(buf1,sizeof(buf1));
+    printf("当前的工作目录是：%s\n",buf1);
+
+    return 0;
+}
+```
+
+### 十、目录遍历函数
+
+1、opendir函数
+
+```c
+DIR *open(const *char name);
+```
+
+作用：打开一个目录
+
+头文件：#include<sys/types.h>
+
+​			   #include<dirent.h>
+
+参数：-name:需要打开的目录名称
+
+返回值：
+
+​		DIR* 类型，理解为目录流
+
+​		错误返回NULL
+
+
+
+2、readdir函数
+
+```c
+struct dirent *readdir(DIR *dirp);
+```
+
+作用：读取目录
+
+头文件：#include<dirent.h>
+
+参数：-dirp:opendir的返回结果
+
+返回值：
+
+​		struct dirent，代表读取到的文件的信息
+
+​		读取到末尾或失败了，返回NULL
+
+```c
+struct dirent{
+	ino_t d_ino;				//此目录进入点的inode
+	off_t d_off;				//目录文件开头至此目录进入点的位移
+	unsigned short d_reclen;	//d_name的长度，不包含NULL字符
+	unsignde char d_type;			//d_name所指的文件类型
+	char d_name[256];			//文件名
+}
+
+d_type:
+	DT_BLK		块设备
+	DT_CHR		字符设备
+    DT_DIR 		目录
+    DT_LNK 		软连接
+    DT_FIFO 	管道
+    DT_REG 		普通文件
+    DT_SOCK 	套接字
+    DT_UNKNOWN	未知
+```
+
+
+
+3、closedir函数
+
+```c
+int closedir(DIR *dirp);
+```
+
+作用：关闭目录
+
+头文件：#include<sys/types.h>
+
+​			   #include<dirent.h>
+
+参数：-dirp:opendir的返回结果
+
+返回值：成功返回0，失败返回-1
+
+
+
+统计文件夹下的普通文件数量的程序：
+
+```c
+#include<sys/types.h>
+#include<dirent.h>
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+
+int getFileNum(const char *path);
+
+int main(int argc,char *argv[]){
+    if(argc<2){
+        printf("%s path\n",argv[0]);
+        return -1;
+    }
+
+    int num=getFileNum(argv[1]);
+
+    printf("普通文件的个数为：%d\n",num);
+
+    return 0;
+}
+
+//用于获取目录下所有普通文件的个数
+int getFileNum(const char *path){
+
+    //打开目录
+    DIR * dir=opendir(path);
+    if(dir == NULL){
+        perror("opendir");
+        exit(0);
+    }
+
+    struct dirent *ptr;
+
+    //记录普通文件的个数
+    int total=0;
+
+    while((ptr=readdir(dir))!=NULL){
+        //获取名称
+        char *dname=ptr->d_name;
+        //忽略.和..
+        if(strcmp(dname,".")==0 || strcmp(dname,"..")==0){
+            continue;
+        }
+        if(ptr->d_type==DT_DIR){
+            //目录，需要继续读取这个目录
+            char newpath[256];
+            sprintf(newpath,"%s/%s",path,dname);
+            total+=getFileNum(newpath);
+        }
+        if(ptr->d_type=DT_REG){
+            //普通文件
+            total++;
+        }
+    }
+
+    //关闭目录
+    closedir(dir);
+
+    return total;
+}
+```
+
+### 十一、dup、dup2函数
+
+1、dup函数
+
+```c
+int dup(int oldfd);
+```
+
+作用：复制一个新的文件描述符,从空闲的文件描述符表中找一个最小的，作为新的拷贝的文件描述符
+
+例如：
+
+```
+fd=3,int fd1=dup(fd);
+fd指向的是a.txt，那么fd1也是指向a.txt
+```
+
+头文件：#include<unistd.h>
+
+参数：-oldfd:文件描述符
+
+
+
+利用dup函数复制文件描述符，并利用新的文件描述符操作文件的程序：
+
+```c
+#include<unistd.h>
+#include<stdio.h>
+#include<fcntl.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<string.h>
+
+int main(){
+
+    int fd=open("a.txt",O_RDWR | O_CREAT,0664);
+    int fd1=dup(fd);
+    if(fd1==-1){
+        perror("dup");
+        return -1;
+    }
+
+    printf("fd:%d,fd1:%d\n",fd,fd1);
+    close(fd);
+    
+    char *str="hello,world!";
+    int ret=write(fd1,str,strlen(str));
+    if(ret==-1){
+        perror("write");
+        return -1;
+    }
+
+    close(fd1);
+    return 0;
+}
+```
+
+
+
+2、dup2函数
+
+```c
+int dup2(int oldfd,int newfd);
+```
+
+作用：重定向文件描述符
+
+例如：
+
+```
+oldfd指向a.txt,newfd指向b.txt
+调用函数成功后：newfd和b.txt做close,newfd指向了a.txt
+oldfd必须是一个有效的文件描述符
+如果Oldfd和newfd值相同，相当于什么都没有做
+```
+
+
+
+利用dup2函数复制文件描述符，并利用新的文件描述符操作文件的程序：
+
+```c
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<unistd.h>
+#include<fcntl.h>
+#include<stdio.h>
+#include<string.h>
+int main(){
+    int fd=open("1.txt",O_RDWR | O_CREAT,0664);
+    if(fd==-1){
+        perror("open");
+        return -1;
+    }
+
+    int fd1=open("2.txt",O_RDWR | O_CREAT,0664);
+    if(fd1==-1){
+        perror("open");
+        return -1;
+    }
+
+    printf("fd:%d,fd1:%d\n",fd,fd1);
+    int fd2=dup2(fd,fd1);
+    if(fd2==-1){
+        perror("dup2");
+        return -1;
+    }
+
+    //通过fd1去写数据，实际操作的是1.txt,而不是2.txt
+    char *str="hello,dup2";
+    int len=write(fd2,str,strlen(str));
+
+    if(len==-1){
+        perror("write");
+        return -1;
+    }
+
+    printf("fd:%d,fd1:%d,fd2:%d\n",fd,fd1,fd2);
+
+    close(fd);
+    close(fd2);
+
+    return 0;
+}
+```
+
+
+
+### 十二、fcntl函数
+
+```c
+int fcntl(int fd,int cmd,.../*arg*/);
+```
+
+作用：（1）复制文件描述符
+
+​			（2）设置/获取文件的状态标志
+
+头文件：#include<unistd.h>
+
+​			   #include<fcntl.h>
+
+参数：
+
+​		-fd:需要操作的文件描述符
+
+​		-cmd:表示对文件描述符进行如何操作
+
+​					-F_DUPFD:复制文件描述符，复制的是第一个参数fd,得到一个新的文件描述符（返回值）
+
+​					```int ret=fcntl(fd,F_DUPFD);```
+
+​					-F_GETFL:获取指定的文件描述符文件状态flag
+
+​					获取的flag和open函数传递的flag是一样的。
+
+​					-F_SETFL:设置文件描述符文件状态flag
+
+​							必选项：O_RDONLY,O_WRONLY,O_RDWR
+
+​							可选项：O_APPEND			表示追加数据
+
+​										   O_NONBLOCK	  设置成非阻塞
+
+补充：
+
+阻塞和非阻塞：描述的是函数调用的行为。
+
+**阻塞（Blocking）**：当一个线程或进程在执行某个操作时，如果无法立即完成该操作，则会进入阻塞状态。在阻塞状态下，该线程或进程会暂停执行，直到满足执行条件或时间过去后才会继续执行。在阻塞状态下，该线程或进程通常会主动放弃CPU的使用权，让其他可运行的线程或进程有机会执行。典型的阻塞操作包括等待用户输入、读取磁盘文件等。
+
+**非阻塞（Non-blocking）**：当一个线程或进程在执行某个操作时，如果无法立即完成该操作，它会立即返回并告知调用者当前无法完成请求。换句话说，非阻塞操作不会导致线程或进程暂停执行。在非阻塞模式下，线程或进程可以继续执行其他任务，而不会等待被操作的事件完成。非阻塞操作通常会通过轮询或回调等方式来检查操作是否已经完成。
+
+
+
+利用fcntl函数获取并设置文件状态的标志，修改文件的程序:
+
+```c
+#include<unistd.h>
+#include<fcntl.h>
+#include<stdio.h>
+#include<string.h>
+int main(){
+
+    //复制文件描述符
+    //int fd=open("1.txt",O_RDONLY);
+    //int ret=fcntl(fd,F_DUPFD);
+
+    //修改或获取文件状态flag
+    int fd=open("1.txt",O_RDWR);
+    if(fd==-1){
+        perror("open");
+        return -1;
+    }
+
+    //获取文件描述符状态flag
+    int flag=fcntl(fd,F_GETFL);
+    if(flag == -1) {
+        perror("fcntl");
+        return -1;
+    }
+    flag |= O_TRUNC;//flag=flag | O_APPEND
+
+
+    //修改文件描述符状态的flag,给flag加入O_APPEND这个标记
+    int ret=fcntl(fd,F_SETFL,flag);
+    if(ret==-1){
+        perror("fcntl");
+        return -1;
+    }
+
+    char *str="hello";
+    int w=write(fd,str,strlen(str));
+    if(w==-1){
+        perror("write");
+        return -1;
+    }
+
+    close(fd);
+
+    return 0;
+}
+```
+
